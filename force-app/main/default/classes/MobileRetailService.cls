@@ -13,13 +13,11 @@ global with sharing class MobileRetailService {
 
         try {
             List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
-            System.debug('Opportunities: ' + opportunities);
             Database.SaveResult[] srList = Database.insert(opportunities, false);
             checkForSaveErrors(srList);
             if (hasErrors) {
                 res.statusCode = 500;
                 res.responseBody = Blob.valueOf(JSON.serialize(errors));
-                System.debug('RES: ' + JSON.serialize(errors));
             }
         } catch (Exception e) {
             res.statusCode = 500;
@@ -32,36 +30,26 @@ global with sharing class MobileRetailService {
         RestRequest req = RestContext.request;
         RestResponse res = new RestResponse();
         String reqBody = req.requestBody.toString();
-        System.debug('PARAMS: ' + req.params);
         CampaignApiParams params = new CampaignApiParams(req.params);
 
         try {
             List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
             Database.SaveResult[] srList;
-            System.debug('findByEmailAndRN: ' + params.findByEmailAndRN);
 
             if (!params.findByEmailAndRN) { //Update By ID
-                System.debug('By Id');
-                System.debug('By Id: ' + opportunities);
                 srList = Database.update(opportunities, false);
             } else { //Update By Email And Retail Number
-                System.debug('By Email + RN');
                 Map<String,Opportunity> emailRNToOppMap = emailRNToOppIdMap(opportunities);
-                System.debug('emailRNToOppMap: ' + emailRNToOppMap);
                 Map<String, String> emailRNToOppIdMap = selectByEmailRN (emailRNToOppMap);
-                System.debug('emailRNToOppIdMap: ' + emailRNToOppIdMap);
                 matchByEmailRN(emailRNToOppMap, emailRNToOppIdMap);
                 srList = Database.update(oppsForUpdate, false);
-                System.debug('srList: ' + srList);
             }
             checkForSaveErrors(srList);
             if (hasErrors) {
                 res.statusCode = 500;
                 res.responseBody = Blob.valueOf(JSON.serialize(errors));
-                System.debug('RES: ' + JSON.serialize(errors));
             }
         } catch (Exception e) {
-            System.debug('Exception: ' + e.getMessage());
             res.statusCode = 500;
             res.responseBody = Blob.valueOf(e.getMessage());
         }
@@ -77,12 +65,9 @@ global with sharing class MobileRetailService {
         try {
             List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
             Database.DeleteResult[] drList;
-
             if (!params.findByEmailAndRN) { //Delete By ID
-                System.debug('DELETE By Id');
                 drList = Database.delete(opportunities, false);
             } else { //Delete By Email And Retail Number
-                System.debug('DELETE By Email + RN');
                 Map<String,Opportunity> emailRNToOppMap = emailRNToOppIdMap(opportunities);
                 Map<String, String> emailRNToOppIdMap = selectByEmailRN (emailRNToOppMap);
                 matchByEmailRN(emailRNToOppMap, emailRNToOppIdMap);
@@ -92,7 +77,6 @@ global with sharing class MobileRetailService {
             if (hasErrors) {
                 res.statusCode = 500;
                 res.responseBody = Blob.valueOf(JSON.serialize(errors));
-                System.debug('RES: ' + JSON.serialize(errors));
             }
         } catch (Exception e) {
             res.statusCode = 500;
@@ -100,14 +84,9 @@ global with sharing class MobileRetailService {
         }
     }
 
-
-
-
-
     private static void checkForSaveErrors(Database.SaveResult[] srList){
         for (Database.SaveResult sr : srList) {
             if (!sr.isSuccess()) {
-                System.debug('Update Failure: ' + sr.getErrors());
                 hasErrors = true;
                 errors.addAll(sr.getErrors());
             }
@@ -150,22 +129,13 @@ global with sharing class MobileRetailService {
 
     private static void matchByEmailRN(Map<String,Opportunity> emailRNToOppMap, Map<String, String> emailRNToOppIdMap){
         for (Opportunity opp : emailRNToOppMap.values()) {
-            System.debug('opp: ' + opp);
-            System.debug('opp: ' + emailRNToOppIdMap);
             if (emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c) != null) {
-                System.debug('opp' + opp);
-                System.debug('getId: ' + opp.Email__c + opp.RetailNumber__c);
-                System.debug('getId: ' + emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c));
-
-                // Opportunity oppForUpdate = emailRNToOppIdMap.get(opp.EmailToRetailNumber__c);
                 opp.Id = emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c);
                 oppsForUpdate.add(opp);
-                System.debug('opp' + opp);
             } else {
                 oppsNotFound.add(opp);
             }
         }
-        System.debug('RES: ' + oppsForUpdate);
     }
 
     public class CampaignApiParams{
@@ -175,7 +145,6 @@ global with sharing class MobileRetailService {
 			for(String key : params.keySet()){
 				params.put(key.toLowerCase(), params.get(key));
 			}
-            System.debug('params.get(\'EmailAndRN\')' + params.get('EmailAndRN'));
 			this.findByEmailAndRN = params.containsKey('EmailAndRN') ? (String.isBlank((String) params.get('EmailAndRN')) ? true : Boolean.valueOf(params.get('EmailAndRN'))) : false;
 		}
 	}
