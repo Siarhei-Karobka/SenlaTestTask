@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>RetailNumber__c</fullName>
+    <caseSensitive>false</caseSensitive>
+    <description>5-17 digits in &quot;RN-XXX&quot; format</description>
+    <externalId>false</externalId>
+    <inlineHelpText>5-17 digits in &quot;RN-XXX&quot; format</inlineHelpText>
+    <label>Retail Number</label>
+    <length>17</length>
+    <required>true</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>true</unique>
+</CustomField>
