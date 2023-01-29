@@ -1,22 +1,182 @@
 @RestResource(urlMapping = '/mobileOrders/*')
 global with sharing class MobileRetailService {
+    private static List<Database.Error> errors = new List<Database.Error>();
+    private static Boolean hasErrors = false;
+    private static List<Opportunity> oppsForUpdate = new List<Opportunity>();
+    private static List<Opportunity> oppsNotFound = new List<Opportunity>();
 
     @HttpPost
     global static void insertMobileOrder(){
         RestRequest req = RestContext.request;
+        RestResponse res = new RestResponse();
         String reqBody = req.requestBody.toString();
-        List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
-        System.debug('Opportunities: ' + opportunities);
-        Database.insert(opportunities, true); //TODO: Change to false;
+
+        try {
+            List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
+            System.debug('Opportunities: ' + opportunities);
+            Database.SaveResult[] srList = Database.insert(opportunities, false);
+            checkForSaveErrors(srList);
+            if (hasErrors) {
+                res.statusCode = 500;
+                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                System.debug('RES: ' + JSON.serialize(errors));
+            }
+        } catch (Exception e) {
+            res.statusCode = 500;
+            res.responseBody = Blob.valueOf(e.getMessage());
+        }
     }
 
-    // @HttpPatch
-    // global static void updateMobileOrder(){
+    @HttpPatch
+    global static void updateMobileOrder(){
+        RestRequest req = RestContext.request;
+        RestResponse res = new RestResponse();
+        String reqBody = req.requestBody.toString();
+        System.debug('PARAMS: ' + req.params);
+        CampaignApiParams params = new CampaignApiParams(req.params);
 
-    // }
+        try {
+            List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
+            Database.SaveResult[] srList;
+            System.debug('findByEmailAndRN: ' + params.findByEmailAndRN);
 
-    // @HttpDelete
-    // global static void deleteMobileOrder(){
+            if (!params.findByEmailAndRN) { //Update By ID
+                System.debug('By Id');
+                System.debug('By Id: ' + opportunities);
+                srList = Database.update(opportunities, false);
+            } else { //Update By Email And Retail Number
+                System.debug('By Email + RN');
+                Map<String,Opportunity> emailRNToOppMap = emailRNToOppIdMap(opportunities);
+                System.debug('emailRNToOppMap: ' + emailRNToOppMap);
+                Map<String, String> emailRNToOppIdMap = selectByEmailRN (emailRNToOppMap);
+                System.debug('emailRNToOppIdMap: ' + emailRNToOppIdMap);
+                matchByEmailRN(emailRNToOppMap, emailRNToOppIdMap);
+                srList = Database.update(oppsForUpdate, false);
+                System.debug('srList: ' + srList);
+            }
+            checkForSaveErrors(srList);
+            if (hasErrors) {
+                res.statusCode = 500;
+                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                System.debug('RES: ' + JSON.serialize(errors));
+            }
+        } catch (Exception e) {
+            System.debug('Exception: ' + e.getMessage());
+            res.statusCode = 500;
+            res.responseBody = Blob.valueOf(e.getMessage());
+        }
+    }
 
-    // }
+    @HttpDelete
+    global static void deleteMobileOrder(){
+        RestRequest req = RestContext.request;
+        RestResponse res = new RestResponse();
+        String reqBody = req.requestBody.toString();
+        CampaignApiParams params = new CampaignApiParams(req.params);
+
+        try {
+            List<Opportunity> opportunities = (List<Opportunity>)JSON.deserialize(reqBody, List<Opportunity>.class);
+            Database.DeleteResult[] drList;
+
+            if (!params.findByEmailAndRN) { //Delete By ID
+                System.debug('DELETE By Id');
+                drList = Database.delete(opportunities, false);
+            } else { //Delete By Email And Retail Number
+                System.debug('DELETE By Email + RN');
+                Map<String,Opportunity> emailRNToOppMap = emailRNToOppIdMap(opportunities);
+                Map<String, String> emailRNToOppIdMap = selectByEmailRN (emailRNToOppMap);
+                matchByEmailRN(emailRNToOppMap, emailRNToOppIdMap);
+                drList = Database.delete(oppsForUpdate, false);
+            }
+            checkForDeleteErrors(drList);
+            if (hasErrors) {
+                res.statusCode = 500;
+                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                System.debug('RES: ' + JSON.serialize(errors));
+            }
+        } catch (Exception e) {
+            res.statusCode = 500;
+            res.responseBody = Blob.valueOf(e.getMessage());
+        }
+    }
+
+
+
+
+
+    private static void checkForSaveErrors(Database.SaveResult[] srList){
+        for (Database.SaveResult sr : srList) {
+            if (!sr.isSuccess()) {
+                System.debug('Update Failure: ' + sr.getErrors());
+                hasErrors = true;
+                errors.addAll(sr.getErrors());
+            }
+        }
+    }
+
+    private static void checkForDeleteErrors(Database.DeleteResult[] drList){
+        for (Database.DeleteResult sr : drList) {
+            if (!sr.isSuccess()) {
+                hasErrors = true;
+                errors.addAll(sr.getErrors());
+            }
+        }
+    }
+
+    private static Map<String,Opportunity> emailRNToOppIdMap(List<Opportunity> opportunities){
+        Map<String,Opportunity> emailRNToOppMap = new Map<String,Opportunity>();
+        for (Opportunity opportunity : opportunities) {
+            if (!String.isBlank(opportunity.Email__c) && !String.isBlank(opportunity.RetailNumber__c)) {
+                emailRNToOppMap.put(opportunity.Email__c + opportunity.RetailNumber__c, opportunity);
+            } else {
+                oppsNotFound.add(opportunity);
+            }
+        }
+        return emailRNToOppMap;
+    }
+
+    private static Map<String, String> selectByEmailRN(Map<String,Opportunity> emailRNToOppMap){
+        Map<String, String> emailRNToOppIdMap = new Map<String, String>();
+        List<Opportunity> opps = [SELECT Id,
+                                        EmailToRetailNumber__c
+                                    FROM Opportunity
+                                    WHERE EmailToRetailNumber__c IN: emailRNToOppMap.keySet()
+                                    ];
+        for (Opportunity opp : opps) {
+            emailRNToOppIdMap.put(opp.EmailToRetailNumber__c, opp.Id);
+        }
+        return emailRNToOppIdMap;
+    }
+
+    private static void matchByEmailRN(Map<String,Opportunity> emailRNToOppMap, Map<String, String> emailRNToOppIdMap){
+        for (Opportunity opp : emailRNToOppMap.values()) {
+            System.debug('opp: ' + opp);
+            System.debug('opp: ' + emailRNToOppIdMap);
+            if (emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c) != null) {
+                System.debug('opp' + opp);
+                System.debug('getId: ' + opp.Email__c + opp.RetailNumber__c);
+                System.debug('getId: ' + emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c));
+
+                // Opportunity oppForUpdate = emailRNToOppIdMap.get(opp.EmailToRetailNumber__c);
+                opp.Id = emailRNToOppIdMap.get(opp.Email__c + opp.RetailNumber__c);
+                oppsForUpdate.add(opp);
+                System.debug('opp' + opp);
+            } else {
+                oppsNotFound.add(opp);
+            }
+        }
+        System.debug('RES: ' + oppsForUpdate);
+    }
+
+    public class CampaignApiParams{
+		public Boolean findByEmailAndRN {get;set;}
+
+		public CampaignApiParams(Map<String, Object> params){
+			for(String key : params.keySet()){
+				params.put(key.toLowerCase(), params.get(key));
+			}
+            System.debug('params.get(\'EmailAndRN\')' + params.get('EmailAndRN'));
+			this.findByEmailAndRN = params.containsKey('EmailAndRN') ? (String.isBlank((String) params.get('EmailAndRN')) ? true : Boolean.valueOf(params.get('EmailAndRN'))) : false;
+		}
+	}
 }
