@@ -8,7 +8,8 @@ global with sharing class MobileRetailService {
     @HttpPost
     global static void insertMobileOrder(){
         RestRequest req = RestContext.request;
-        RestResponse res = new RestResponse();
+        RestResponse res = RestContext.response;
+
         String reqBody = req.requestBody.toString();
 
         try {
@@ -16,8 +17,7 @@ global with sharing class MobileRetailService {
             Database.SaveResult[] srList = Database.insert(opportunities, false);
             checkForSaveErrors(srList);
             if (hasErrors) {
-                res.statusCode = 500;
-                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                throw new MobileRetailServiceException(JSON.serialize(errors));
             }
         } catch (Exception e) {
             res.statusCode = 500;
@@ -28,7 +28,8 @@ global with sharing class MobileRetailService {
     @HttpPatch
     global static void updateMobileOrder(){
         RestRequest req = RestContext.request;
-        RestResponse res = new RestResponse();
+        RestResponse res = RestContext.response;
+
         String reqBody = req.requestBody.toString();
         CampaignApiParams params = new CampaignApiParams(req.params);
 
@@ -46,8 +47,9 @@ global with sharing class MobileRetailService {
             }
             checkForSaveErrors(srList);
             if (hasErrors) {
-                res.statusCode = 500;
-                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                throw new MobileRetailServiceException(JSON.serialize(errors));
+            } else if (!oppsNotFound.isEmpty()){
+                throw new MobileRetailServiceException(JSON.serialize(oppsNotFound));
             }
         } catch (Exception e) {
             res.statusCode = 500;
@@ -58,7 +60,8 @@ global with sharing class MobileRetailService {
     @HttpDelete
     global static void deleteMobileOrder(){
         RestRequest req = RestContext.request;
-        RestResponse res = new RestResponse();
+        RestResponse res = RestContext.response;
+
         String reqBody = req.requestBody.toString();
         CampaignApiParams params = new CampaignApiParams(req.params);
 
@@ -75,8 +78,9 @@ global with sharing class MobileRetailService {
             }
             checkForDeleteErrors(drList);
             if (hasErrors) {
-                res.statusCode = 500;
-                res.responseBody = Blob.valueOf(JSON.serialize(errors));
+                throw new MobileRetailServiceException(JSON.serialize(errors));
+            } else if (!oppsNotFound.isEmpty()){
+                throw new MobileRetailServiceException(JSON.serialize(oppsNotFound));
             }
         } catch (Exception e) {
             res.statusCode = 500;
@@ -94,10 +98,10 @@ global with sharing class MobileRetailService {
     }
 
     private static void checkForDeleteErrors(Database.DeleteResult[] drList){
-        for (Database.DeleteResult sr : drList) {
-            if (!sr.isSuccess()) {
+        for (Database.DeleteResult dr : drList) {
+            if (!dr.isSuccess()) {
                 hasErrors = true;
-                errors.addAll(sr.getErrors());
+                errors.addAll(dr.getErrors());
             }
         }
     }
@@ -147,5 +151,11 @@ global with sharing class MobileRetailService {
 			}
 			this.findByEmailAndRN = params.containsKey('EmailAndRN') ? (String.isBlank((String) params.get('EmailAndRN')) ? true : Boolean.valueOf(params.get('EmailAndRN'))) : false;
 		}
+	}
+
+    public class MobileRetailServiceException extends Exception{
+		String message{get{
+			return this.getMessage();
+		}}
 	}
 }
