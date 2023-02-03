@@ -10,6 +10,10 @@
 		<name>CustomField</name>
 	</types>
 	<types>
+		<members>Opp_Stage_changed_to_Needs_Analysis</members>
+		<name>CustomNotificationType</name>
+	</types>
+	<types>
 		<members>Opportunity.Retail_Number</members>
 		<name>ValidationRule</name>
 	</types>
